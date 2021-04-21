@@ -4,6 +4,7 @@ require 'etc'
 require 'fileutils'
 require 'tempfile'
 require 'yaml'
+require 'open3'
 require 'rubygems'
 require 'bundler/setup'
 Bundler.require(:default)
@@ -16,6 +17,8 @@ class Migrator
   NPM_DIR = "#{DIST_DIR}/npm"
 
   POOL_SIZE = Etc.nprocessors
+
+  ERROR_LOG = "#{BASE_DIR}/error.log"
 
   def initialize
     @config = YAML.load_file("#{BASE_DIR}/config.yml")
@@ -77,14 +80,13 @@ class Migrator
     with_worker do |worker|
       ruby_gems.each do |name, versions|
         versions.each do |version|
-          source = version['source']
-          filename = File.basename(source)
-          target = "#{GEMS_DIR}/#{name}/#{filename}"
-
-          cmd = "gem push --host #{@config['gems']['to']} #{target}"
-          puts cmd
-          success = system(cmd)
-          err("ERROR: #{cmd}") unless success
+          worker.post do
+            source = version['source']
+            filename = File.basename(source)
+            target = "#{GEMS_DIR}/#{name}/#{filename}"
+            cmd = "gem push --host #{@config['gems']['to']} #{target}"
+            run_cmd(cmd, "#{filename} has been pushed")
+          end
         end
       end
     end
@@ -137,10 +139,8 @@ class Migrator
           filename = File.basename(source)
           target = "#{NPM_DIR}/#{name}/#{filename}"
           worker.post do
-            cmd = "npm publish --silent --registry #{@config['npm']['to']} #{target}"
-            puts cmd
-            success = system(cmd)
-            err("ERROR: #{cmd}") unless success
+            cmd = "npm publish --registry #{@config['npm']['to']} #{target}"
+            run_cmd(cmd, "#{filename} has been pushed")
           end
         end
       end
@@ -170,6 +170,23 @@ class Migrator
     end
   end
 
+  def run_cmd(cmd, success_message)
+    begin
+      cmd_log, status = Open3.capture2e(cmd)
+      if status.success?
+        log(success_message)
+      else
+        dump_error({
+          cmd: cmd,
+          log: cmd_log
+        }.to_json)
+        err("ERROR: #{cmd} - more details please check error.log")
+      end
+    rescue => e
+      err("#{cmd} - ERR: #{e.message}")
+    end
+  end
+
   def validate_config!
     valid = true
 
@@ -191,6 +208,12 @@ class Migrator
     yield worker
     worker.shutdown
     worker.wait_for_termination
+  end
+
+  def dump_error(error)
+    File.open(ERROR_LOG, 'a') do |file|
+      file.puts(error)
+    end
   end
 
   def log(message)

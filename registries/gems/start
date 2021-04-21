@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+if ! $(gem list | grep geminabox &> /dev/null); then
+  gem install geminabox
+fi
+
+rackup

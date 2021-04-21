@@ -1,0 +1,9 @@
+---
+gems:
+  registry: geminabox # right now we only support migrate from geminabox
+  from: https://your-source-rubygems-domain
+  to: https://your-target-rubygems-domain
+npm:
+  registry: verdaccio # right now we only support migrate from verdaccio
+  from: https://your-source-npm-domain
+  to: https://your-target-npm-domain

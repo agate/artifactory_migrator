@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+
+if ! $(npm list -g | grep verdaccio@ &> /dev/null); then
+  npm install --global verdaccio
+fi
+
+verdaccio -c ./config.yml
